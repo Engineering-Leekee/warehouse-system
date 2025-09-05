@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>LEEKEE Warehouse Inventory System</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .top-actions {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .section {
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            min-width: 280px;
+            max-width: 420px;
+        }
+        label {
+            display: block;
+            margin: 6px 0 4px;
+            font-weight: 600;
+        }
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .btn {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        .btn-green {
+            background: #28a745;
+            color: white;
+        }
+        .btn-red {
+            background: #dc3545;
+            color: white;
+        }
+        .inventory {
+            max-width: 1200px;
+            margin: 20px auto;
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 8px;
+            border: 1px solid #e6e6e6;
+            text-align: left;
+            font-size: 0.95rem;
+        }
+        th {
+            background: #007bff;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background: #fafafa;
+        }
+        #remove_form {
+            margin-top: 10px;
+            display: none;
+        }
+        .small {
+            font-size: 0.95rem;
+            color: #555;
+        }
+        .actions-row {
+            display: flex;
+            gap: 10px;
+        }
+        .search-btn {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #007bff;
+            background: white;
+            color: #007bff;
+            cursor: pointer;
+        }
+        .status-available {
+            color: #0b6623;
+            font-weight: 700;
+        }
+        .status-quarantine {
+            color: #b8860b;
+            font-weight: 700;
+        }
+        .flash {
+            max-width: 1200px;
+            margin: 10px auto;
+            padding: 10px;
+            border-radius: 6px;
+        }
+        .flash.success {
+            background: #e6ffed;
+            color: #064e2a;
+            border: 1px solid #b7f2c9;
+        }
+        .flash.error {
+            background: #ffecec;
+            color: #6a1a1a;
+            border: 1px solid #ffb6b6;
+        }
+        .footer {
+            position: fixed;
+            bottom: 8px;
+            right: 12px;
+            font-size: 0.8rem;
+            color: #777;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 4px 8px;
+            border-radius: 4px;
+            z-index: 10;
+        }
+        @media (max-width: 800px) {
+            .top-actions {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>LEEKEE Warehouse Inventory System</h1>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          <div class="flash {{ 'success' if category == 'message' or category == 'success' else 'error' }}">
+            {{ msg }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- Top Action Sections -->
+    <div class="top-actions">
+        <!-- IN — Add Item -->
+        <div class="section">
+            <h2>IN — Add Item</h2>
+            <form action="/add" method="post">
+                <label for="add_part_number">Part Number</label>
+                <input id="add_part_number" name="part_number" type="text" required>
+
+                <label for="add_location">Location (rack)</label>
+                <input id="add_location" name="location" type="text" required>
+
+                <label for="add_quantity">Quantity</label>
+                <input id="add_quantity" name="quantity" type="number" min="1" required>
+
+                <button type="submit" class="btn btn-green">Add (IN)</button>
+            </form>
+        </div>
+
+        <!-- OUT — Remove Item -->
+        <div class="section">
+            <h2>OUT — Remove Item</h2>
+            <label for="remove_part_number">Part Number (scan / type)</label>
+            <div class="actions-row">
+                <input id="remove_part_number" type="text" placeholder="Scan or type part number">
+                <button class="search-btn" type="button" onclick="fetchRackData()">Search</button>
+            </div>
+            <small class="small">
+                Search will show all racks & allow removing from multiple racks at once. Quarantined racks are locked.
+            </small>
+
+            <form id="remove_form" action="/remove_multiple" method="post">
+                <input type="hidden" name="part_number" id="hidden_part_number">
+                <table id="rack_table" style="margin-top:10px">
+                    <thead>
+                        <tr>
+                            <th>Rack Location</th>
+                            <th>Qty Available</th>
+                            <th>Status</th>
+                            <th>Remove Qty</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <button type="submit" class="btn btn-red" style="margin-top:10px">Confirm OUT</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Inventory Display -->
+    <div class="inventory">
+        <h2>Current Inventory</h2>
+
+        <!-- Export Buttons -->
+        <div style="text-align: right; margin-bottom: 10px;">
+            <a href="/export/csv" class="btn" style="display: inline-block; width: auto; padding: 8px 16px; background-color: #6c757d; color: white; text-decoration: none; margin-right: 8px;">
+                Export to CSV
+            </a>
+            <a href="/export/excel" class="btn" style="display: inline-block; width: auto; padding: 8px 16px; background-color: #007bff; color: white; text-decoration: none;">
+                Export to Excel
+            </a>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Part Number</th>
+                    <th>Location</th>
+                    <th>Quantity</th>
+                    <th>Date In</th>
+                    <th>Last Updated</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for part, rows in inventory.items() %}
+                    {% for row in rows %}
+                        <tr>
+                            <td>{{ part }}</td>
+                            <td>{{ row.location }}</td>
+                            <td>{{ row.quantity }}</td>
+                            <td>{{ row.date_in or '-' }}</td>
+                            <td>{{ row.last_updated or '-' }}</td>
+                            <td>
+                                {% if (row.status or 'Available') == 'Available' %}
+                                    <span class="status-available">Available</span>
+                                {% else %}
+                                    <span class="status-quarantine">Quarantine</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <form method="post" action="/toggle_status" style="display:inline;">
+                                    <input type="hidden" name="part_number" value="{{ part }}">
+                                    <input type="hidden" name="location" value="{{ row.location }}">
+                                    <button type="submit" class="btn" style="padding:6px 10px; font-size:14px; background:#ffc107; color:#212529;">
+                                        {% if (row.status or 'Available') == 'Available' %}
+                                            Quarantine
+                                        {% else %}
+                                            Make Available
+                                        {% endif %}
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        function fetchRackData() {
+            const part = document.getElementById("remove_part_number").value.trim();
+            if (!part) {
+                alert("Please enter or scan a part number");
+                return;
+            }
+
+            fetch(`/get_racks?part_number=${encodeURIComponent(part)}`)
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.querySelector("#rack_table tbody");
+                    tbody.innerHTML = "";
+
+                    if (!data || data.length === 0) {
+                        alert("No stock found for " + part);
+                        document.getElementById("remove_form").style.display = "none";
+                        return;
+                    }
+
+                    document.getElementById("hidden_part_number").value = part;
+
+                    data.forEach(row => {
+                        const isQuarantine = row.status && row.status.toLowerCase() === "quarantine";
+                        const statusLabel = isQuarantine
+                            ? '<span style="color:#b8860b;font-weight:700">Quarantine</span>'
+                            : '<span style="color:#0b6623;font-weight:700">Available</span>';
+
+                        const removeInput = isQuarantine
+                            ? `<input type="number" name="remove_qty[${row.location}]" min="0" max="${row.quantity}" placeholder="0" disabled>`
+                            : `<input type="number" name="remove_qty[${row.location}]" min="0" max="${row.quantity}" placeholder="0">`;
+
+                        const tr = document.createElement("tr");
+                        tr.innerHTML = `
+                            <td>${row.location}</td>
+                            <td>${row.quantity}</td>
+                            <td>${statusLabel}</td>
+                            <td>${removeInput}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+
+                    document.getElementById("remove_form").style.display = "block";
+                })
+                .catch(err => {
+                    console.error("Error fetching rack data:", err);
+                    alert("Failed to load rack data. Please try again.");
+                });
+        }
+
+        // Press Enter to trigger search
+        document.getElementById("remove_part_number").addEventListener("keypress", function(e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                fetchRackData();
+            }
+        });
+    </script>
+
+    <!-- Footer -->
+    <div class="footer">
+        Created by Affandi and Faisal © 2025
+    </div>
+
+</body>
+</html>
